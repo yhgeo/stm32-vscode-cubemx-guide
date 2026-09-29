@@ -1,0 +1,9 @@
+# 操作系统
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# 编辑器临时文件
+*.tmp
+*.swp
+*~

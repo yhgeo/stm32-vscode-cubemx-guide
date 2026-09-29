@@ -1,0 +1,61 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "CMake: Configure (Debug)",
+            "type": "shell",
+            "command": "${env:LOCALAPPDATA}/stm32cube/bundles/cmake/4.3.1+st.1/bin/cmake.exe",
+            "args": ["--preset", "Debug", "-S", "${workspaceFolder}"],
+            "options": {
+                "env": {
+                    "PATH": "${env:LOCALAPPDATA}/stm32cube/bundles/gnu-tools-for-stm32/14.3.1+st.2/bin;${env:LOCALAPPDATA}/stm32cube/bundles/ninja/1.13.2+st.1/bin;${env:PATH}"
+                }
+            },
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+        {
+            "label": "CMake: Build (Debug)",
+            "type": "shell",
+            "command": "${env:LOCALAPPDATA}/stm32cube/bundles/cmake/4.3.1+st.1/bin/cmake.exe",
+            "args": ["--build", "${workspaceFolder}/build/Debug"],
+            "options": {
+                "env": {
+                    "PATH": "${env:LOCALAPPDATA}/stm32cube/bundles/gnu-tools-for-stm32/14.3.1+st.2/bin;${env:LOCALAPPDATA}/stm32cube/bundles/ninja/1.13.2+st.1/bin;${env:PATH}"
+                }
+            },
+            "group": { "kind": "build", "isDefault": true },
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": {
+                "owner": "gcc",
+                "fileLocation": ["relative", "${workspaceFolder}"],
+                "pattern": {
+                    "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                    "file": 1, "line": 2, "column": 3, "severity": 4, "message": 5
+                }
+            }
+        },
+        {
+            "label": "OpenOCD: Flash",
+            "type": "shell",
+            "command": "D:/OpenOCD/bin/openocd.exe",
+            "args": [
+                "-f", "${workspaceFolder}/openocd.cfg",
+                "-c", "program ${workspaceFolder}/build/Debug/${workspaceFolderBasename}.elf verify reset exit"
+            ],
+            "dependsOn": "CMake: Build (Debug)",
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build + Flash",
+            "dependsOn": ["CMake: Build (Debug)", "OpenOCD: Flash"],
+            "dependsOrder": "sequence",
+            "group": "build",
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "problemMatcher": []
+        }
+    ]
+}
