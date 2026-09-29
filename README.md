@@ -17,6 +17,7 @@
 - [6. 第三步：日常开发循环](#6-第三步日常开发循环)
 - [7. 常见坑与排查](#7-常见坑与排查)
 - [8. 速查表](#8-速查表)
+- [附录：国内网络给 git 配代理](#附录国内网络给-git-配代理)
 
 ---
 
@@ -379,6 +380,68 @@ reset_config none
 
 第一行**一定要有**。它告诉 OpenOCD 去哪找自己的脚本；不写的话，能不能找到取决于你从哪个目录启动它，时好时坏。
 
+### 5.7 改用 Release 模式
+
+默认推荐 Debug（能打断点）。如果想用 Release（体积小、跑得快），**四个地方必须一起改**：
+
+| 文件 | 改成 |
+| --- | --- |
+| `.vscode/settings.json` | `"cmake.configurePreset": "Release"`、`"cmake.buildPreset": "Release"` |
+| `.vscode/c_cpp_properties.json` | `build/Release/compile_commands.json` |
+| `.clangd` | `CompilationDatabase: build/Release` |
+| `.vscode/tasks.json` | 所有 `build/Debug` 换成 `build/Release` |
+
+⚠️ **Release 默认是 `-Os -g0`**。`-g0` 表示不生成调试信息，**断点和看变量都会失效**。以后想调试，要么改回 Debug，要么把 `cmake/gcc-arm-none-eabi.cmake` 里的 `-g0` 改成 `-g3`——那样既享受优化，又保留调试信息。
+
+### 5.8 自动收集源文件（不用每次改 CMakeLists）
+
+默认情况下每加一个 `.c` 都要去 `CMakeLists.txt` 登记，很烦。用 CMake 的 `GLOB` 可以自动化。
+
+把 `CMakeLists.txt` 里原来的：
+
+```cmake
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE
+    # Add user sources here
+)
+```
+
+换成：
+
+```cmake
+# ---- 自动收集用户源文件 ----
+# CubeMX 已经登记过的文件必须排除，否则会重复编译、报符号冲突
+set(MX_MANAGED_SRC
+    main.c
+    stm32f1xx_it.c
+    stm32f1xx_hal_msp.c
+    sysmem.c
+    syscalls.c
+    system_stm32f1xx.c
+)
+
+# CONFIGURE_DEPENDS：每次构建都检查目录变化，新增 .c 自动生效
+file(GLOB USER_SRC_FILES CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/Core/Src/*.c"
+)
+
+foreach(_src ${USER_SRC_FILES})
+    get_filename_component(_name "${_src}" NAME)
+    if(NOT _name IN_LIST MX_MANAGED_SRC)
+        list(APPEND USER_SOURCES "${_src}")
+    endif()
+endforeach()
+
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE ${USER_SOURCES})
+```
+
+之后：
+
+- 新写的 `.c` 丢进 `Core/Src/`，**直接编译就生效**，不用改任何配置
+- `.h` 放进 `Core/Inc/` 就能被 include，**头文件本来就不需要登记**
+- 排除清单里的 6 个文件名，就是 CubeMX 在 `cmake/stm32cubemx/CMakeLists.txt` 里已经登记过的那些
+
+> 为什么要排除？因为 CubeMX 生成的 `cmake/stm32cubemx/CMakeLists.txt` 里已经显式列了 `main.c`、`stm32f1xx_it.c` 等 6 个文件。如果 GLOB 把它们也收进来，同一个文件会被编译两次，链接时报**重复符号**。
+
 ---
 
 ## 6. 第三步：日常开发循环
@@ -405,16 +468,17 @@ reset_config none
 
 ### 加新源文件的操作
 
-假设你写了 `Core/Src/bsp_key.c`，要在 `CMakeLists.txt` 里加一行：
+**用了 [5.8 自动收集方案](#58-自动收集源文件不用每次改-cmakelists)的话**：把 `.c` 丢进 `Core/Src/` 就行，什么都不用改，直接编译。
+
+**没用的话**，要手工登记：
 
 ```cmake
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/bsp_key.c          # ← 加这行
-    Core/Src/bsp_key_delay.c    # ← 和这行
 )
 ```
 
-**不加就编译不进去**，会报「undefined reference to `xxx`」。加完重新 configure 一次（改了 CMakeLists 要重新生成构建文件）。
+**不加就编译不进去**，会报「undefined reference to `xxx`」。改完 `CMakeLists.txt` 要重新 configure 一次。
 
 ---
 
@@ -442,7 +506,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 
 **原因**：没登记到 `CMakeLists.txt` 的 `target_sources`。
 
-**修复**：见 [第 6 节](#加新源文件的操作)。
+**修复**：手工加一行，或者用 [5.8 的自动收集方案](#58-自动收集源文件不用每次改-cmakelists)一劳永逸。
 
 ### 7.3 调试器启动不了
 
@@ -552,6 +616,42 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
     m          # ← 数学库，用到 sin/cos/sqrt 时加
 )
+```
+
+---
+
+## 附录：国内网络给 git 配代理
+
+如果 `git clone` / `git push` GitHub 报 `Empty reply from server` 或超时，说明需要走代理。
+
+先确认代理端口（Clash Verge 默认混合端口是 `7897`）：
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -x http://127.0.0.1:7897 https://github.com
+# 返回 200 说明端口对
+```
+
+**只对 GitHub 走代理**（推荐，不影响 Gitee、内网仓库）：
+
+```bash
+git config --global http.https://github.com.proxy http://127.0.0.1:7897
+git config --global http.https://raw.githubusercontent.com.proxy http://127.0.0.1:7897
+```
+
+**取消**：
+
+```bash
+git config --global --unset http.https://github.com.proxy
+git config --global --unset http.https://raw.githubusercontent.com.proxy
+```
+
+⚠️ 这个配置**依赖 Clash 一直开着**。Clash 关掉时 git 访问 GitHub 会失败（其他仓库不受影响）。
+
+想让所有仓库都走代理（含 Gitee）：
+
+```bash
+git config --global http.proxy http://127.0.0.1:7897
+git config --global https.proxy http://127.0.0.1:7897
 ```
 
 ---

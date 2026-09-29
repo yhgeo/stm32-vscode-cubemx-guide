@@ -10,6 +10,7 @@
 | `launch.json` | `.vscode/launch.json` | 一般不用改 |
 | `tasks.json` | `.vscode/tasks.json` | CMake / 工具链版本号、OpenOCD 路径 |
 | `openocd.cfg` | 工程根目录 `openocd.cfg` | OpenOCD 脚本目录的绝对路径 |
+| `CMakeLists-auto-sources.cmake` | **粘贴**进工程根目录的 `CMakeLists.txt` | 无（替换掉原来的 `target_sources` 段） |
 
 ## 三个必须一致的路径
 
