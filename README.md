@@ -21,6 +21,136 @@ CubeMX 配置芯片
 
 烧录和调试优先使用 ST 扩展自己的 ST-Link GDB Server。OpenOCD 仅在你明确需要外部调试器、脚本或 CI 流程时再启用；它不是这套指南的默认依赖。
 
+## 目录
+
+- [从零创建到烧录：完整流程](#从零创建到烧录完整流程)
+- [1. 工具清单](#1-工具清单)
+- [2. 用 CubeMX 生成 CMake 工程](#2-用-cubemx-生成-cmake-工程)
+- [3. 在 VS Code 中导入、配置和构建](#3-在-vs-code-中导入配置和构建)
+- [4. 代码该写在哪里](#4-代码该写在哪里)
+- [5. 代码补全：clangd 与 compile_commands](#5-代码补全clangd-与-compile_commands)
+- [6. 烧录与调试](#6-烧录与调试)
+- [7. 常见问题排查](#7-常见问题排查)
+- [8. 仓库模板](#8-仓库模板)
+- [9. 参考资料](#9-参考资料)
+- [10. 维护策略](#10-维护策略)
+
+## 从零创建到烧录：完整流程
+
+这一节只走一次最短成功路径：创建一个最小 GPIO 工程，编译后用 ST-Link 下载并运行。后面的章节再解释文件结构、代码补全和高级配置。
+
+### 0. 准备工具和硬件
+
+安装 VS Code、STM32CubeMX、STM32CubeIDE for Visual Studio Code 扩展和 ST-Link USB 驱动。扩展安装方式、驱动安装位置和当前版本注意事项，以 [ST 官方安装文档](https://dev.st.com/stm32cube-docs/stm32cubeide-vscode/latest/en/docs/markup/getting_started/installation.html) 为准。
+
+准备一块 STM32F103C8T6 开发板、ST-Link、杜邦线和一个可观察的 LED。LED 可以是板载 LED，也可以是接在 GPIO 上的外部 LED；具体引脚以你的板卡原理图为准，不要盲目照抄别人的 `PC13`。
+
+### 1. 在 CubeMX 新建工程
+
+1. 打开 CubeMX，选择 `File → New Project`，搜索并选中目标 MCU，例如 `STM32F103C8T6`。
+2. 在 `System Core → SYS → Debug` 选择 **Serial Wire**，保留 SWD 调试口。
+3. 配置一个 GPIO 输出作为 LED，例如选择板卡原理图对应的引脚，并设置为 `GPIO_Output`；如果要让代码变量名清楚，可以把 GPIO Label 设为 `LED`。
+4. 按实际晶振配置 `RCC` 和 `Clock Configuration`。Blue Pill 常见外部晶振是 8 MHz，但不同板卡可能不同；时钟必须以实物为准。
+5. 打开 `Project Manager`，填写：
+
+   | 项目 | 示例 |
+   | --- | --- |
+   | Project Name | `Blink` |
+   | Project Location | `D:\\STM32\\Blink` |
+   | Toolchain / IDE | `CMake` |
+
+6. 在代码生成设置中，初学者建议选择把使用到的固件库复制到工程目录，并启用保留用户代码区域。这样工程交给另一台电脑时，不依赖某个开发者本机的固件库路径。
+7. 点击 `GENERATE CODE`，确认工程目录中出现 `.ioc`、`CMakeLists.txt`、`CMakePresets.json`、`Core/`、`Drivers/` 和 `cmake/`。
+
+### 2. 用你的 VS Code 打开工程根目录
+
+你的 VS Code 命令行入口是：
+
+```powershell
+& 'D:\\VS Code\\Microsoft VS Code\\bin\\code.cmd' 'D:\\STM32\\Blink'
+```
+
+也可以在 VS Code 中使用 `File → Open Folder...` 打开 `D:\\STM32\\Blink`。必须打开包含 `.ioc` 和 `CMakeLists.txt` 的工程根目录，不要只打开 `Core/`。
+
+### 3. 让 ST 扩展识别并配置工程
+
+1. 在 VS Code 左侧打开 STM32CubeIDE 视图。
+2. 如果扩展没有自动识别工程，运行 `Discover STM32Cube project`。
+3. 按提示选择 MCU、工具链和主工程。
+4. 在 CMake 状态栏或命令面板中选择 `Debug` preset。
+5. 执行 `Configure`。成功后应出现 `build/Debug/`，其中会有 CMake/Ninja 文件和 `compile_commands.json`。
+
+这是 ST 官方推荐的导入顺序：先打开工程根目录，再选择 CMake preset、Discover 项目并 Configure；具体界面以当前扩展版本为准。[ST 首次创建项目文档](https://dev.st.com/stm32cube-docs/stm32cubeide-vscode/latest/en/docs/markup/getting_started/first_project_creation.html) 有完整流程。
+
+### 4. 写入最小点灯代码
+
+打开 `Core/Src/main.c`，只在 CubeMX 留出的用户代码区域中添加逻辑。GPIO Label 为 `LED` 时，示例通常如下；如果生成的名字不同，以 `main.c` 中实际的 `LED_Pin` 和 `LED_GPIO_Port` 为准：
+
+```c
+/* USER CODE BEGIN 2 */
+/* USER CODE END 2 */
+
+/* USER CODE BEGIN WHILE */
+while (1)
+{
+    HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+    HAL_Delay(500);
+}
+/* USER CODE END WHILE */
+```
+
+如果你的 LED 为低电平点亮，第一次运行时可能表现为“亮灭逻辑反着”，这不代表工程失败。若使用外部 LED，还要确认串联限流电阻和极性。
+
+### 5. 编译工程
+
+在 VS Code 中执行 CMake `Build`，或从 STM32CubeIDE 视图执行构建。第一次构建只使用 `Debug`，不要同时切换 Release、手写 GCC 路径或添加 OpenOCD。
+
+成功标准：
+
+- 终端没有 `error:` 或 `undefined reference`。
+- `build/Debug/` 下生成工程的 `.elf` 文件。
+- `compile_commands.json` 已生成，代码补全不再完全依赖手写 include 路径。
+
+如果构建失败，先修复构建错误再进行烧录；烧录失败通常不是通过反复按 F5 解决的。
+
+### 6. 连接 ST-Link
+
+连接前断开可能造成冲突的其他调试器。常见 SWD 接线如下：
+
+| ST-Link | 目标板 |
+| --- | --- |
+| `SWDIO` | `SWDIO` |
+| `SWCLK` | `SWCLK` |
+| `GND` | `GND` |
+| `3.3V / VTref` | 目标板电压参考或按板卡说明连接 |
+| `NRST` | `NRST`，连接不上时再接 |
+
+不要同时用两个电源给目标板供电；`VTref` 的接法以 ST-Link 和开发板说明为准。确认目标板供电、SWDIO/SWCLK 没接反，并且 CubeMX 中启用了 `Serial Wire`。
+
+### 7. 烧录并运行
+
+推荐用 ST 扩展的原生调试流程完成第一次下载：
+
+1. 打开 `Run and Debug`。
+2. 选择 `STM32Cube: STM32 Launch ST-Link GDB Server`；如果没有 `launch.json`，点击创建调试配置并选择 ST-Link。
+3. 按 `F5`。
+4. 扩展会构建工程、启动 ST-Link GDB Server、把当前 `.elf` 下载到芯片并复位，通常停在 `main`。
+5. 点击继续运行；LED 应按代码间隔闪烁。
+
+ST 文档说明，首次调试可能需要在 STM32Cube 设备视图中更新 ST-Link 固件；如果没有可供调试的 ELF，先回到构建步骤排查。[ST 调试文档](https://dev.st.com/stm32cube-docs/stm32cubeide-vscode/latest/en/docs/markup/development/debug.html)
+
+如果你只想下载、不想停在断点，可以在 ST 扩展提供的烧录/程序下载入口中选择当前工程和 ST-Link。不要把不同工程的 ELF 拖进烧录工具；下载前核对工程名、preset 和输出文件。
+
+### 8. 第一次成功后的日常循环
+
+```text
+只改业务逻辑       → 编辑 Core/Src 的用户代码 → Build → F5
+改引脚/时钟/外设   → 修改 .ioc → Generate Code → 检查变更 → Configure → Build → F5
+新增 .c 文件       → 加入 CMakeLists.txt 或采用自动收集模板 → Configure → Build
+```
+
+到这里，已经完成了“从空工程到能烧录、能运行、能断点调试”的最小闭环。后续再按下面章节配置 clangd、Release 和 OpenOCD。
+
 ## 1. 工具清单
 
 | 工具 | 用途 | 安装建议 |

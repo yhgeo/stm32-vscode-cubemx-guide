@@ -63,6 +63,9 @@ $readme = Get-Content -LiteralPath (Join-Path $Root "README.md") -Raw
 Assert-Condition ($readme -match "STM32CubeIDE for Visual Studio Code") "README 未说明当前 ST VS Code 工作流"
 Assert-Condition ($readme -match "Discover STM32Cube project") "README 未说明项目发现步骤"
 Assert-Condition ($readme -match "CMake") "README 未说明 CMake 主线"
+Assert-Condition ($readme -match "## 目录") "README 缺少目录"
+Assert-Condition ($readme -match "从零创建到烧录") "README 缺少从零创建到烧录流程"
+Assert-Condition ($readme -match "D:\\VS Code\\Microsoft VS Code\\bin\\code\.cmd") "README 未说明当前 VS Code 命令行入口"
 
 $allTemplateText = Get-ChildItem -LiteralPath (Join-Path $Root "templates") -File |
     Get-Content -Raw |
