@@ -1,0 +1,11 @@
+{
+    "configurations": [
+        {
+            "name": "STM32 (optional cpptools)",
+            "compileCommands": "${workspaceFolder}/build/Debug/compile_commands.json",
+            "cStandard": "c11",
+            "cppStandard": "c++17"
+        }
+    ],
+    "version": 4
+}

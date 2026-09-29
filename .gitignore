@@ -1,0 +1,23 @@
+# 操作系统
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# 编辑器临时文件
+*.tmp
+*.swp
+*~
+
+# STM32/CMake 构建产物
+build/
+out/
+cmake-build-*/
+*.elf
+*.hex
+*.bin
+*.map
+compile_commands.json
+
+# 本地工具/用户状态
+.vscode/*.code-snippets
+.idea/
